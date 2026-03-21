@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
 
   try {
     await resend.emails.send({
-      from: 'Schedgio <updates@schedgio.app>',
+      from: 'Schedgio <onboarding@resend.dev>',
       to: emails,
       subject: `Schedule updated: ${scheduleName}`,
       html: `
