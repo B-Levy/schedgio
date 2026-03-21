@@ -23,7 +23,6 @@ export default function SharedView() {
   const { id } = useParams<{ id: string }>()
   const [schedule, setSchedule] = useState<Schedule | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -54,15 +53,6 @@ export default function SharedView() {
     <div style={{ padding: '3rem', textAlign: 'center', color: '#6b7280' }}>Loading...</div>
   )
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? ''
-  const feedUrl = `${siteUrl}/api/feed/${schedule.feed_token}`
-
-  function copyFeed() {
-    navigator.clipboard.writeText(feedUrl)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
   return (
     <div>
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #e5e7eb' }}>
@@ -71,8 +61,8 @@ export default function SharedView() {
         </a>
       </header>
 
-      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '2rem 1.25rem 3rem' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: 700, letterSpacing: '-.5px', marginBottom: '4px' }}>
+      <div style={{ maxWidth: '640px', margin: '0 auto', padding: '1.5rem 1.25rem 3rem' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 700, letterSpacing: '-.5px', marginBottom: '4px' }}>
           {schedule.name || 'Untitled Schedule'}
         </h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
@@ -89,6 +79,18 @@ export default function SharedView() {
           </span>
         </div>
 
+        {/* Subscribe box — prominent at top */}
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '1.1rem 1.25rem', marginBottom: '1.5rem' }}>
+          <div style={{ fontWeight: 600, fontSize: '15px', marginBottom: '4px' }}>
+            Stay up to date
+          </div>
+          <p style={{ fontSize: '13px', color: '#6b7280', marginBottom: '12px', lineHeight: 1.6 }}>
+            Subscribe to get this schedule in your calendar app. Updates sync automatically.
+          </p>
+          <SubscribeForm scheduleId={id} feedToken={schedule.feed_token} />
+        </div>
+
+        {/* Event cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '1.5rem' }}>
           {schedule.events.length === 0 && (
             <p style={{ color: '#6b7280', fontSize: '14px' }}>No events added yet.</p>
@@ -139,30 +141,13 @@ export default function SharedView() {
           })}
         </div>
 
-        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <a href={`/api/feed/${schedule.feed_token}?download=1`}
-              download={`${schedule.name || 'schedule'}.ics`}
-              style={{ fontSize: '13px', padding: '8px 16px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', textDecoration: 'none', color: '#1a1a1a', fontWeight: 500 }}>
-              Download all events (.ics)
-            </a>
-          </div>
-          <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '1.1rem 1.25rem', border: '1px solid #e5e7eb' }}>
-            <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px' }}>Subscribe to this calendar</div>
-            <p style={{ fontSize: '12px', color: '#6b7280', marginBottom: '10px', lineHeight: 1.6 }}>
-              Add this URL to Google or Apple Calendar for automatic updates. Or enter your email to get notified when events change.
-            </p>
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '7px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#6b7280' }}>
-                {feedUrl}
-              </div>
-              <button onClick={copyFeed}
-                style={{ fontSize: '12px', padding: '5px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontWeight: 500 }}>
-                {copied ? '✓ Copied' : 'Copy'}
-              </button>
-            </div>
-            <SubscribeForm scheduleId={id} />
-          </div>
+        {/* Download all */}
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '1rem' }}>
+          <a href={`/api/feed/${schedule.feed_token}?download=1`}
+            download={`${schedule.name || 'schedule'}.ics`}
+            style={{ fontSize: '13px', padding: '8px 16px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', textDecoration: 'none', color: '#1a1a1a', fontWeight: 500 }}>
+            Download all events (.ics)
+          </a>
         </div>
       </div>
     </div>
