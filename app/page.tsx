@@ -164,7 +164,7 @@ export default function Home() {
               style={{
                 display: 'flex', alignItems: 'center', gap: '10px',
                 padding: '10px 1.25rem', border: 'none', background: activeNav === item.key ? '#f0fdf4' : 'transparent',
-                cursor: 'pointer', fontSize: '14px', fontWeight: activeNav === item.key ? 600 : 400,
+                cursor: 'pointer', fontSize: '14px', fontWeight: activeNav === item.key ? 700 : 400, letterSpacing: activeNav === item.key ? '-0.3px' : 'normal',
                 color: activeNav === item.key ? '#1D9E75' : '#374151',
                 borderLeft: `3px solid ${activeNav === item.key ? '#1D9E75' : 'transparent'}`,
                 textAlign: 'left', transition: 'all .15s'
@@ -174,12 +174,7 @@ export default function Home() {
             </button>
           ))}
 
-          <div style={{ marginTop: 'auto', padding: '1rem 1.25rem', borderTop: '1px solid #f3f4f6' }}>
-            <button onClick={createSchedule}
-              style={{ width: '100%', padding: '8px', borderRadius: '8px', border: 'none', background: '#1D9E75', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-              + New schedule
-            </button>
-          </div>
+
         </aside>
 
         {/* Main content */}
@@ -188,7 +183,13 @@ export default function Home() {
           {/* MY SCHEDULES */}
           {activeNav === 'schedules' && (
             <div style={{ maxWidth: '800px' }}>
-              <h1 style={{ fontSize: '20px', fontWeight: 700, marginBottom: '1.25rem' }}>My Schedules</h1>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                <h1 style={{ fontSize: '20px', fontWeight: 700 }}>My Schedules</h1>
+                <button onClick={createSchedule}
+                  style={{ padding: '6px 14px', borderRadius: '7px', border: 'none', background: '#1D9E75', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  + New schedule
+                </button>
+              </div>
               {schedules.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '4rem 1rem', color: '#6b7280', background: '#fff', borderRadius: '10px', border: '1px solid #e5e7eb' }}>
                   <p style={{ fontSize: '15px', marginBottom: '8px' }}>No schedules yet.</p>
@@ -223,9 +224,14 @@ export default function Home() {
                       {s.expanded && (
                         <div style={{ borderTop: '1px solid #f3f4f6' }}>
                           {s.events?.length === 0 && (
-                            <div style={{ padding: '1rem 1.1rem', fontSize: '13px', color: '#9ca3af' }}>No events yet.</div>
+                            <div style={{ padding: '1rem 1.1rem', fontSize: '13px', color: '#9ca3af' }}>No upcoming events.</div>
                           )}
                           {(s.events ?? [])
+                            .filter(ev => {
+                              if (!ev.date) return false
+                              const today = new Date(); today.setHours(0,0,0,0)
+                              return new Date(ev.date + 'T12:00:00') >= today
+                            })
                             .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
                             .slice(0, 10)
                             .map((ev, i) => {
@@ -250,11 +256,48 @@ export default function Home() {
                                 </div>
                               )
                             })}
-                          {(s.events?.length ?? 0) > 10 && (
-                            <div style={{ padding: '.6rem 1.1rem', fontSize: '12px', color: '#9ca3af', borderBottom: '1px solid #f9fafb' }}>
-                              + {(s.events?.length ?? 0) - 10} more events — click Edit to see all
-                            </div>
-                          )}
+                          {(() => {
+                            const tod = new Date(); tod.setHours(0,0,0,0)
+                            const fc = (s.events ?? []).filter(ev => ev.date && new Date(ev.date + 'T12:00:00') >= tod).length
+                            return fc > 10 ? (
+                              <div style={{ padding: '.6rem 1.1rem', fontSize: '12px', color: '#9ca3af', borderBottom: '1px solid #f9fafb' }}>
+                                + {fc - 10} more upcoming — click Edit to see all
+                              </div>
+                            ) : null
+                          })()}
+                          {/* Past events in grey */}
+                          {(s.events ?? [])
+                            .filter(ev => {
+                              if (!ev.date) return false
+                              const tod = new Date(); tod.setHours(0,0,0,0)
+                              return new Date(ev.date + 'T12:00:00') < tod
+                            })
+                            .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
+                            .map((ev, i, arr) => {
+                              const d = ev.date ? new Date(ev.date + 'T12:00:00') : null
+                              const mon = d ? d.toLocaleString('en-US', { month: 'short' }) : '—'
+                              const day = d ? d.getDate() : '—'
+                              const dateStr = d ? d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : ''
+                              return (
+                                <div key={ev.id || i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '.6rem 1.1rem', borderBottom: i < arr.length - 1 ? '1px solid #f9fafb' : 'none', opacity: 0.45 }}>
+                                  {i === 0 && (
+                                    <div style={{ position: 'absolute', left: 0, right: 0, borderTop: '1px dashed #e5e7eb', marginTop: '-1px' }} />
+                                  )}
+                                  <div style={{ minWidth: '36px', textAlign: 'center', background: '#f3f4f6', borderRadius: '6px', padding: '4px 6px', flexShrink: 0 }}>
+                                    <div style={{ fontSize: '9px', textTransform: 'uppercase', color: '#9ca3af' }}>{mon}</div>
+                                    <div style={{ fontSize: '16px', fontWeight: 600, lineHeight: 1.1, color: '#9ca3af' }}>{day}</div>
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontWeight: 500, fontSize: '13px', color: '#9ca3af' }}>{ev.name || 'Untitled'}</div>
+                                    <div style={{ fontSize: '11px', color: '#d1d5db', display: 'flex', gap: '8px', marginTop: '1px' }}>
+                                      {dateStr && <span>{dateStr}</span>}
+                                      {ev.location && <span>📍 {ev.location}</span>}
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })
+                          }
 
                           {/* Share links */}
                           <div style={{ padding: '.75rem 1.1rem', background: '#f9fafb', display: 'flex', flexDirection: 'column', gap: '8px' }}>
