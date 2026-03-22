@@ -72,3 +72,43 @@ create policy "owner read"
 create policy "anyone can subscribe"
   on subscribers for insert
   with check (true);
+
+-- Attachments table (run this in Supabase SQL editor)
+create table if not exists attachments (
+  id           uuid primary key default gen_random_uuid(),
+  event_id     uuid references events(id) on delete cascade,
+  name         text not null,
+  url          text not null,
+  size         integer,
+  mime_type    text,
+  created_at   timestamptz not null default now()
+);
+
+alter table attachments enable row level security;
+
+create policy "owner full access"
+  on attachments for all
+  using (
+    exists (
+      select 1 from events e
+      join schedules s on s.id = e.schedule_id
+      where e.id = event_id and s.owner_id = auth.uid()
+    )
+  );
+
+create policy "public read attachments"
+  on attachments for select
+  using (true);
+
+-- Storage bucket for attachments (run this too)
+insert into storage.buckets (id, name, public)
+values ('attachments', 'attachments', true)
+on conflict do nothing;
+
+create policy "authenticated upload"
+  on storage.objects for insert
+  with check (bucket_id = 'attachments' and auth.role() = 'authenticated');
+
+create policy "public read storage"
+  on storage.objects for select
+  using (bucket_id = 'attachments');
