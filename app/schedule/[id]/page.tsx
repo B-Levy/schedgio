@@ -15,19 +15,33 @@ const PLACE_SUGGESTIONS = [
   'Patriot Place, Foxborough, MA',
 ]
 
-const TIME_OPTIONS: string[] = []
-for (let h = 0; h < 24; h++) {
-  for (const m of [0, 15, 30, 45]) {
-    const hh = String(h).padStart(2, '0')
-    const mm = String(m).padStart(2, '0')
-    TIME_OPTIONS.push(`${hh}:${mm}`)
-  }
+// Hours 1–12
+const HOURS = ['12','1','2','3','4','5','6','7','8','9','10','11']
+// Minutes in 15-min increments
+const MINUTES = ['00','15','30','45']
+
+// Convert HH:MM (24h) to { hour, minute, ampm }
+function parseTo12(t: string): { hour: string; minute: string; ampm: 'AM' | 'PM' } {
+  if (!t) return { hour: '12', minute: '00', ampm: 'PM' }
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const hour = String(h === 0 ? 12 : h > 12 ? h - 12 : h)
+  const minute = String(m).padStart(2, '0')
+  return { hour, minute, ampm }
+}
+
+// Convert { hour, minute, ampm } back to HH:MM (24h)
+function formatTo24(hour: string, minute: string, ampm: 'AM' | 'PM'): string {
+  let h = parseInt(hour)
+  if (ampm === 'AM' && h === 12) h = 0
+  if (ampm === 'PM' && h !== 12) h += 12
+  return `${String(h).padStart(2, '0')}:${minute}`
 }
 
 function fmtTime(t: string): string {
   if (!t) return ''
-  const [h, m] = t.split(':').map(Number)
-  return `${(h % 12) || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+  const { hour, minute, ampm } = parseTo12(t)
+  return `${hour}:${minute} ${ampm}`
 }
 
 type Event = {
@@ -67,7 +81,7 @@ export default function ScheduleEditor() {
   const [copied, setCopied] = useState<string | null>(null)
   const [dragIdx, setDragIdx] = useState<number | null>(null)
   const [dragOver, setDragOver] = useState<number | null>(null)
-  const [activeCell, setActiveCell] = useState<{ row: number; col: number } | null>(null)
+  const [hoveredRow, setHoveredRow] = useState<number | null>(null)
   const tableRef = useRef<HTMLTableElement>(null)
 
   useEffect(() => { loadSchedule() }, [id])
@@ -104,7 +118,12 @@ export default function ScheduleEditor() {
     const updated = [...events]
     for (let i = 0; i < updated.length; i++) {
       const ev = updated[i]
-      const payload = { name: ev.name, date: ev.date || null, time: ev.time || null, location: ev.location, notes: ev.notes, sequence: (ev.sequence ?? 0) + 1, photos: ev.photos, schedule_id: id }
+      const payload = {
+        name: ev.name, date: ev.date || null,
+        time: ev.time || null, location: ev.location,
+        notes: ev.notes, sequence: (ev.sequence ?? 0) + 1,
+        photos: ev.photos, schedule_id: id
+      }
       if (ev.id) {
         await supabase.from('events').update(payload).eq('id', ev.id)
       } else {
@@ -113,9 +132,7 @@ export default function ScheduleEditor() {
       }
     }
     setEvents(updated)
-    setSaving(false)
-    setSaved(true)
-    setDirty(false)
+    setSaving(false); setSaved(true); setDirty(false)
     setTimeout(() => setSaved(false), 2500)
   }
 
@@ -130,17 +147,14 @@ export default function ScheduleEditor() {
   }
 
   function addEvent() {
-    setEvents(evs => [...evs, { name: '', date: '', time: '', location: '', notes: '', sequence: 0, photos: [] }])
+    setEvents(evs => [...evs, { name: '', date: '', time: '12:00', location: '', notes: '', sequence: 0, photos: [] }])
     setDirty(true)
-    setTimeout(() => focusCell(events.length, 0), 50)
   }
 
   function duplicateEvent(idx: number) {
     const ev = { ...events[idx], id: undefined, name: events[idx].name + ' (copy)' }
-    const next = [...events]
-    next.splice(idx + 1, 0, ev)
-    setEvents(next)
-    setDirty(true)
+    const next = [...events]; next.splice(idx + 1, 0, ev)
+    setEvents(next); setDirty(true)
   }
 
   async function removeEvent(idx: number) {
@@ -159,9 +173,8 @@ export default function ScheduleEditor() {
     if (e.key === 'Tab') {
       e.preventDefault()
       const nextCol = e.shiftKey ? col - 1 : col + 1
-      if (nextCol >= 0 && nextCol < COLS.length) {
-        focusCell(row, nextCol)
-      } else if (!e.shiftKey && nextCol >= COLS.length) {
+      if (nextCol >= 0 && nextCol < COLS.length) focusCell(row, nextCol)
+      else if (!e.shiftKey && nextCol >= COLS.length) {
         if (row + 1 < events.length) focusCell(row + 1, 0)
         else { addEvent(); setTimeout(() => focusCell(row + 1, 0), 80) }
       } else if (e.shiftKey && nextCol < 0 && row > 0) {
@@ -187,7 +200,6 @@ export default function ScheduleEditor() {
     setLocSug(null)
   }
 
-  // Drag to reorder
   function onDragStart(idx: number) { setDragIdx(idx) }
   function onDragOver(e: React.DragEvent, idx: number) { e.preventDefault(); setDragOver(idx) }
   function onDrop(idx: number) {
@@ -195,10 +207,8 @@ export default function ScheduleEditor() {
     const next = [...events]
     const [moved] = next.splice(dragIdx, 1)
     next.splice(idx, 0, moved)
-    setEvents(next)
-    setDirty(true)
-    setDragIdx(null)
-    setDragOver(null)
+    setEvents(next); setDirty(true)
+    setDragIdx(null); setDragOver(null)
   }
 
   function copy(text: string, key: string) {
@@ -217,16 +227,23 @@ export default function ScheduleEditor() {
     setTimeout(() => { setShowNotify(false); setNotifySent(false) }, 2500)
   }
 
-  const shareUrl = schedule ? (schedule.is_private ? `${window.location.origin}/s/${id}?t=${schedule.feed_token}` : `${window.location.origin}/s/${id}`) : ''
+  const shareUrl = schedule ? `${window.location.origin}/s/${schedule.is_private ? `${id}?t=${schedule.feed_token}` : id}` : ''
   const feedUrl = schedule ? `${window.location.origin}/api/feed/${schedule.feed_token}` : ''
 
   if (!schedule) return <div style={{ padding: '2rem', color: '#6b7280' }}>Loading...</div>
 
-  // Cell styles
+  const selectStyle: React.CSSProperties = {
+    border: 'none', outline: 'none', fontSize: '13px',
+    background: 'transparent', fontFamily: 'inherit',
+    color: '#1a1a1a', cursor: 'pointer', padding: '0 2px',
+    height: '100%',
+  }
+
   const cellBase: React.CSSProperties = {
-    border: 'none', outline: 'none', fontSize: '13px', padding: '0 8px',
-    background: 'transparent', width: '100%', height: '100%',
-    fontFamily: 'inherit', color: '#1a1a1a', cursor: 'cell'
+    border: 'none', outline: 'none', fontSize: '13px',
+    padding: '0 8px', background: 'transparent',
+    width: '100%', height: '100%',
+    fontFamily: 'inherit', color: '#1a1a1a',
   }
 
   return (
@@ -236,7 +253,7 @@ export default function ScheduleEditor() {
       <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.25rem', height: '52px', borderBottom: '1px solid #e5e7eb', background: '#fff', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '18px', padding: '4px 8px' }}>←</button>
-          <a href="/" style={{ fontSize: '18px', fontWeight: 700, textDecoration: 'none', color: '#1a1a1a', letterSpacing: '-0.5px' }}>sched<span style={{ color: '#1D9E75' }}>io</span></a>
+          <a href="/" style={{ fontSize: '18px', fontWeight: 700, textDecoration: 'none', color: '#1a1a1a', letterSpacing: '-0.5px' }}>sched<span style={{ color: '#1D9E75' }}>gio</span></a>
           <input
             value={schedule.name}
             placeholder="Schedule name..."
@@ -280,31 +297,33 @@ export default function ScheduleEditor() {
 
       {/* Spreadsheet */}
       <div style={{ flex: 1, overflow: 'auto', background: '#fff' }}>
-        <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', tableLayout: 'fixed' }}>
+        <table ref={tableRef} style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
           <colgroup>
-            <col style={{ width: '32px' }} />
-            <col style={{ width: '32px' }} />
-            <col style={{ width: '200px' }} />
-            <col style={{ width: '130px' }} />
-            <col style={{ width: '130px' }} />
+            <col style={{ width: '28px' }} />
+            <col style={{ width: '28px' }} />
             <col style={{ width: '220px' }} />
+            <col style={{ width: '130px' }} />
             <col style={{ width: '160px' }} />
-            <col style={{ width: '80px' }} />
+            <col style={{ width: '200px' }} />
+            <col style={{ width: '160px' }} />
+            <col style={{ width: '100px' }} />
           </colgroup>
           <thead>
-            <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #e5e7eb' }}>
+            <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 5 }}>
               <th style={{ padding: '8px 4px', fontSize: '11px', color: '#9ca3af', textAlign: 'center', fontWeight: 400 }}></th>
               <th style={{ padding: '8px 4px', fontSize: '11px', color: '#9ca3af', textAlign: 'center', fontWeight: 400 }}>#</th>
-              {['Event', 'Date', 'Time', 'Location', 'Notes', ''].map(h => (
+              {['Event', 'Date', 'Time', 'Location', 'Notes', 'Actions'].map(h => (
                 <th key={h} style={{ padding: '8px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: '#6b7280', textAlign: 'left', borderRight: '1px solid #f3f4f6' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {events.map((ev, i) => {
-              const isActive = activeCell?.row === i
-              const isDragging = dragIdx === i
+              const { hour, minute, ampm } = parseTo12(ev.time || '12:00')
               const isOver = dragOver === i
+              const isDragging = dragIdx === i
+              const isHovered = hoveredRow === i
+
               return (
                 <tr key={i}
                   draggable
@@ -312,87 +331,72 @@ export default function ScheduleEditor() {
                   onDragOver={e => onDragOver(e, i)}
                   onDrop={() => onDrop(i)}
                   onDragEnd={() => { setDragIdx(null); setDragOver(null) }}
+                  onMouseEnter={() => setHoveredRow(i)}
+                  onMouseLeave={() => setHoveredRow(null)}
                   style={{
                     borderBottom: '1px solid #f3f4f6',
-                    background: isDragging ? '#f0fdf4' : isOver ? '#e0f2fe' : isActive ? '#fafffe' : '#fff',
+                    background: isDragging ? '#f0fdf4' : isOver ? '#e0f2fe' : isHovered ? '#fafffe' : '#fff',
                     opacity: isDragging ? 0.5 : 1,
-                    transition: 'background .1s'
                   }}>
 
                   {/* Drag handle */}
-                  <td style={{ textAlign: 'center', padding: '0', cursor: 'grab', color: '#d1d5db', fontSize: '14px', userSelect: 'none' }}>
-                    ☰
-                  </td>
+                  <td style={{ textAlign: 'center', padding: '0 4px', cursor: 'grab', color: '#d1d5db', fontSize: '13px', userSelect: 'none' }}>☰</td>
 
                   {/* Row number */}
-                  <td style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af', padding: '0', userSelect: 'none' }}>
-                    {i + 1}
-                  </td>
+                  <td style={{ textAlign: 'center', fontSize: '11px', color: '#9ca3af', userSelect: 'none' }}>{i + 1}</td>
 
                   {/* Event name */}
-                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}
-                    onClick={() => setActiveCell({ row: i, col: 0 })}>
-                    <input
-                      data-cell={`${i}-0`}
-                      value={ev.name}
-                      placeholder="Event name"
+                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}>
+                    <input data-cell={`${i}-0`} value={ev.name} placeholder="Event name"
                       onChange={e => updateEvent(i, { name: e.target.value })}
                       onKeyDown={e => handleCellKeyDown(e, i, 0)}
-                      onFocus={() => setActiveCell({ row: i, col: 0 })}
-                      style={{ ...cellBase }}
-                    />
+                      style={cellBase} />
                   </td>
 
                   {/* Date */}
-                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}
-                    onClick={() => setActiveCell({ row: i, col: 1 })}>
-                    <input
-                      data-cell={`${i}-1`}
-                      type="date"
-                      value={ev.date}
+                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}>
+                    <input data-cell={`${i}-1`} type="date" value={ev.date}
                       onChange={e => updateEvent(i, { date: e.target.value })}
                       onKeyDown={e => handleCellKeyDown(e, i, 1)}
-                      onFocus={() => setActiveCell({ row: i, col: 1 })}
-                      style={{ ...cellBase, colorScheme: 'light' }}
-                    />
+                      style={{ ...cellBase, colorScheme: 'light' }} />
                   </td>
 
-                  {/* Time — 15 min increments */}
-                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}
-                    onClick={() => setActiveCell({ row: i, col: 2 })}>
-                    <select
-                      data-cell={`${i}-2`}
-                      value={ev.time}
-                      onChange={e => updateEvent(i, { time: e.target.value })}
-                      onKeyDown={e => handleCellKeyDown(e, i, 2)}
-                      onFocus={() => setActiveCell({ row: i, col: 2 })}
-                      style={{ ...cellBase, cursor: 'pointer', appearance: 'none' }}>
-                      <option value="">— time —</option>
-                      {TIME_OPTIONS.map(t => (
-                        <option key={t} value={t}>{fmtTime(t)}</option>
-                      ))}
-                    </select>
+                  {/* Time — split hour / min / AM-PM */}
+                  <td style={{ padding: '0 6px', borderRight: '1px solid #f3f4f6', height: '36px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      <select data-cell={`${i}-2`} value={hour}
+                        onChange={e => updateEvent(i, { time: formatTo24(e.target.value, minute, ampm) })}
+                        onKeyDown={e => handleCellKeyDown(e, i, 2)}
+                        style={{ ...selectStyle, width: '40px' }}>
+                        {HOURS.map(h => <option key={h} value={h}>{h}</option>)}
+                      </select>
+                      <span style={{ color: '#9ca3af', fontSize: '13px' }}>:</span>
+                      <select value={minute}
+                        onChange={e => updateEvent(i, { time: formatTo24(hour, e.target.value, ampm) })}
+                        style={{ ...selectStyle, width: '44px' }}>
+                        {MINUTES.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      <select value={ampm}
+                        onChange={e => updateEvent(i, { time: formatTo24(hour, minute, e.target.value as 'AM' | 'PM') })}
+                        style={{ ...selectStyle, width: '48px' }}>
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                      </select>
+                    </div>
                   </td>
 
-                  {/* Location with autocomplete */}
-                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px', position: 'relative' }}
-                    onClick={() => setActiveCell({ row: i, col: 3 })}>
-                    <input
-                      data-cell={`${i}-3`}
-                      value={ev.location}
-                      placeholder="Location"
+                  {/* Location */}
+                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px', position: 'relative' }}>
+                    <input data-cell={`${i}-3`} value={ev.location} placeholder="Location"
                       onChange={e => handleLocInput(i, e.target.value)}
                       onKeyDown={e => handleCellKeyDown(e, i, 3)}
-                      onFocus={() => setActiveCell({ row: i, col: 3 })}
                       onBlur={() => setTimeout(() => setLocSug(null), 200)}
-                      style={{ ...cellBase }}
-                      autoComplete="off"
-                    />
+                      style={cellBase} autoComplete="off" />
                     {locSug?.idx === i && (
                       <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: '6px', zIndex: 30, boxShadow: '0 4px 16px rgba(0,0,0,.1)' }}>
                         {locSug.results.map(r => (
                           <div key={r} onMouseDown={() => pickLocation(i, r)}
-                            style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderBottom: '1px solid #f9fafb' }}
+                            style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}
                             onMouseEnter={e => (e.currentTarget.style.background = '#f0fdf4')}
                             onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
                             📍 {r}
@@ -403,29 +407,23 @@ export default function ScheduleEditor() {
                   </td>
 
                   {/* Notes */}
-                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}
-                    onClick={() => setActiveCell({ row: i, col: 4 })}>
-                    <input
-                      data-cell={`${i}-4`}
-                      value={ev.notes}
-                      placeholder="Notes"
+                  <td style={{ padding: 0, borderRight: '1px solid #f3f4f6', height: '36px' }}>
+                    <input data-cell={`${i}-4`} value={ev.notes} placeholder="Notes"
                       onChange={e => updateEvent(i, { notes: e.target.value })}
                       onKeyDown={e => handleCellKeyDown(e, i, 4)}
-                      onFocus={() => setActiveCell({ row: i, col: 4 })}
-                      style={{ ...cellBase }}
-                    />
+                      style={cellBase} />
                   </td>
 
-                  {/* Row actions */}
-                  <td style={{ padding: '0 6px', height: '36px' }}>
-                    <div style={{ display: 'flex', gap: '4px', opacity: isActive ? 1 : 0, transition: 'opacity .15s' }}>
-                      <button onClick={() => duplicateEvent(i)} title="Duplicate row"
-                        style={{ fontSize: '11px', padding: '3px 7px', borderRadius: '4px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', color: '#6b7280' }}>
-                        ⧉
+                  {/* Actions — always visible */}
+                  <td style={{ padding: '0 8px', height: '36px' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                      <button onClick={() => duplicateEvent(i)} title="Duplicate"
+                        style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                        Copy
                       </button>
-                      <button onClick={() => removeEvent(i)} title="Delete row"
-                        style={{ fontSize: '11px', padding: '3px 7px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff', cursor: 'pointer', color: '#dc2626' }}>
-                        ×
+                      <button onClick={() => removeEvent(i)} title="Delete"
+                        style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '4px', border: '1px solid #fca5a5', background: '#fff', cursor: 'pointer', color: '#dc2626', whiteSpace: 'nowrap' }}>
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -433,12 +431,11 @@ export default function ScheduleEditor() {
               )
             })}
 
-            {/* Add row inline */}
-            <tr style={{ borderBottom: '1px solid #f3f4f6' }}
-              onClick={addEvent}>
-              <td colSpan={8} style={{ padding: '8px 12px', fontSize: '12px', color: '#9ca3af', cursor: 'pointer' }}
-                onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            {/* Add row */}
+            <tr onClick={addEvent} style={{ cursor: 'pointer' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <td colSpan={8} style={{ padding: '9px 12px', fontSize: '12px', color: '#9ca3af' }}>
                 + Click to add row
               </td>
             </tr>
@@ -448,32 +445,40 @@ export default function ScheduleEditor() {
 
       {/* Share panel */}
       {showShare && (
-        <div style={{ borderTop: '1px solid #e5e7eb', background: '#fff', padding: '1.25rem', flexShrink: 0, display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+        <div style={{ borderTop: '1px solid #e5e7eb', background: '#fff', padding: '1rem 1.25rem', flexShrink: 0, display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: '240px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: '#6b7280', marginBottom: '6px' }}>Share link</div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#374151' }}>{shareUrl}</div>
-              <button onClick={() => copy(shareUrl, 'share')} className="btn btn-sm">{copied === 'share' ? '✓' : 'Copy'}</button>
+              <code style={{ flex: 1, fontSize: '11px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#374151' }}>{shareUrl}</code>
+              <button onClick={() => copy(shareUrl, 'share')}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 500, color: copied === 'share' ? '#1D9E75' : '#374151' }}>
+                {copied === 'share' ? '✓ Copied' : 'Copy'}
+              </button>
             </div>
           </div>
           <div style={{ flex: 1, minWidth: '240px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: '#6b7280', marginBottom: '6px' }}>Calendar feed</div>
             <div style={{ display: 'flex', gap: '8px' }}>
-              <div style={{ flex: 1, fontFamily: 'monospace', fontSize: '11px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#374151' }}>{feedUrl}</div>
-              <button onClick={() => copy(feedUrl, 'feed')} className="btn btn-sm">{copied === 'feed' ? '✓' : 'Copy'}</button>
+              <code style={{ flex: 1, fontSize: '11px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '6px', padding: '6px 10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#374151' }}>{feedUrl}</code>
+              <button onClick={() => copy(feedUrl, 'feed')}
+                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 500, color: copied === 'feed' ? '#1D9E75' : '#374151' }}>
+                {copied === 'feed' ? '✓ Copied' : 'Copy'}
+              </button>
             </div>
           </div>
-          <div style={{ flex: 1, minWidth: '200px' }}>
+          <div style={{ flex: 1, minWidth: '180px' }}>
             <div style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: '#6b7280', marginBottom: '6px' }}>Notify subscribers</div>
             {(schedule.subscribers?.length ?? 0) === 0
               ? <p style={{ fontSize: '12px', color: '#9ca3af' }}>No subscribers yet.</p>
-              : <button onClick={() => setShowNotify(true)} className="btn btn-sm btn-primary">Send notice to {schedule.subscribers.length}</button>
+              : <button onClick={() => setShowNotify(true)}
+                  style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#1D9E75', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                  Send notice to {schedule.subscribers.length}
+                </button>
             }
           </div>
         </div>
       )}
 
-      {/* Notify modal */}
       {showNotify && (
         <NotifyModal subscribers={schedule.subscribers} scheduleName={schedule.name}
           onSend={sendNotifications} onClose={() => setShowNotify(false)} sent={notifySent} />
@@ -513,7 +518,7 @@ function NotifyModal({ subscribers, scheduleName, onSend, onClose, sent }: {
             </div>
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
               <button onClick={onClose} style={{ padding: '6px 14px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: '13px' }}>Cancel</button>
-              <button onClick={() => onSend(Array.from(selected))} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Send emails</button>
+              <button onClick={() => onSend(Array.from(selected))} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', background: '#1D9E75', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>Send</button>
             </div>
           </>
         )}
