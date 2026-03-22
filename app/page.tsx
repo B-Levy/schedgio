@@ -399,6 +399,29 @@ export default function Home() {
 
         </main>
       </div>
+
+      {/* Bottom nav — mobile only */}
+      <nav className="bottom-nav" style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        background: '#fff', borderTop: '1px solid #e5e7eb',
+        display: 'none', alignItems: 'center', justifyContent: 'space-around',
+        padding: '8px 0 calc(8px + env(safe-area-inset-bottom))',
+        zIndex: 20
+      }}>
+        {navItems.map(item => (
+          <button key={item.key}
+            onClick={() => setActiveNav(item.key as any)}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px',
+              border: 'none', background: 'transparent', cursor: 'pointer',
+              padding: '4px 16px',
+              color: activeNav === item.key ? '#1D9E75' : '#9ca3af',
+            }}>
+            <span style={{ fontSize: '20px' }}>{item.icon}</span>
+            <span style={{ fontSize: '10px', fontWeight: activeNav === item.key ? 700 : 400 }}>{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }
@@ -425,9 +448,19 @@ function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#f9fafb' }}>
+      <style>{`
+        .login-body { display: flex; flex: 1; }
+        .login-hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem 2rem; text-align: center; }
+        .login-search-panel { width: 420px; background: #fff; border-left: 1px solid #e5e7eb; padding: 2rem; display: flex; flex-direction: column; gap: 1rem; }
+        @media (max-width: 640px) {
+          .login-body { flex-direction: column; }
+          .login-hero { padding: 2rem 1.25rem 1rem; justify-content: flex-start; }
+          .login-search-panel { width: 100%; border-left: none; border-top: 1px solid #e5e7eb; padding: 1.25rem; }
+        }
+      `}</style>
 
       {/* Header */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1.5rem', height: '52px', background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1rem', height: '52px', background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
         <a href="/" style={{ fontSize: '20px', fontWeight: 700, textDecoration: 'none', color: '#1a1a1a', letterSpacing: '-0.5px' }}>
           sched<span style={{ color: '#1D9E75' }}>gio</span>
         </a>
@@ -443,10 +476,7 @@ function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
         </button>
       </header>
 
-      <div style={{ display: 'flex', flex: 1 }}>
-
-        {/* Left — hero */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 2rem', textAlign: 'center' }}>
+      <div className="login-body">
           <h1 style={{ fontSize: '40px', fontWeight: 800, letterSpacing: '-1.5px', lineHeight: 1.15, marginBottom: '1rem' }}>
             Schedules that<br /><span style={{ color: '#1D9E75' }}>stay in sync.</span>
           </h1>
@@ -474,8 +504,8 @@ function LoginScreen({ onSignIn }: { onSignIn: () => void }) {
           </div>
         </div>
 
-        {/* Right — search (no login required) */}
-        <div style={{ width: '420px', background: '#fff', borderLeft: '1px solid #e5e7eb', padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        {/* Search panel */}
+        <div className="login-search-panel">
           <div>
             <h2 style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>Find a schedule</h2>
             <p style={{ fontSize: '13px', color: '#6b7280' }}>Search public schedules — no login needed.</p>
